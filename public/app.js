@@ -13,6 +13,8 @@ const state = {
   selectedDay: null,
   pending: null, // Termin, der gerade bestätigt wird
   actionWidget: null,
+  overview: null, // { upcoming, suggestions } für die Startseite
+  overviewAt: 0,
 };
 
 // ---------- API ----------
@@ -68,6 +70,17 @@ const fmtDayHeading = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: '
 const fmtLong = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const fmtTime = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' });
 const fmtMonth = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' });
+const fmtShortDay = { format: (d) => `${d.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '')} ${d.getDate()}.${d.getMonth() + 1}.` };
+const fmtSuggestDay = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'short' });
+
+function inDays(d) {
+  const diff = Math.round((startOfDay(d) - startOfDay(new Date())) / DAY);
+  if (diff <= 0) return 'Heute';
+  if (diff === 1) return 'Morgen';
+  if (diff < 14) return `in ${diff} Tagen`;
+  if (diff < 60) return `in ${Math.round(diff / 7)} Wochen`;
+  return `in ${Math.round(diff / 30)} Monaten`;
+}
 
 function dayHeading(d) {
   const today = startOfDay(new Date());
@@ -172,7 +185,9 @@ function renderWidgets() {
     return pa ? tb - ta : ta - tb;
   });
   grid.replaceChildren(...sorted.map((w) => widgetNode(w)));
-  $('#empty').hidden = sorted.length > 0;
+  // Mit verbundenem Kalender übernehmen Vorschläge & Termine die Rolle des Leerzustands.
+  $('#empty').hidden = sorted.length > 0 || state.connected;
+  $('#empty-hint').hidden = sorted.length > 0 || !state.connected;
 }
 
 function tick() {
@@ -228,6 +243,7 @@ $('#connect-form').addEventListener('submit', async (e) => {
     form.password.value = '';
     closeSheet('#connect-sheet');
     toast(`${res.calendars.length} Kalender verbunden`);
+    loadOverview(true);
     openPicker();
   } catch (ex) {
     err.textContent = ex.message;
@@ -324,9 +340,11 @@ function renderList() {
   box.replaceChildren(...nodes, more);
 }
 
-function eventNode(ev) {
+function eventNode(ev, { withDate = false } = {}) {
   const start = toDate(ev.start, ev.allDay);
   const isPast = start <= new Date();
+  const added = ev.added || state.widgets.some((w) => w.eventId === ev.id);
+  const meta = [ev.calendar, ev.location].filter(Boolean).join(' · ');
   return el('button', {
     class: 'event',
     type: 'button',
@@ -335,13 +353,22 @@ function eventNode(ev) {
     onclick: () => openConfirm(ev),
   },
     el('span', { class: 'bar' }),
-    el('span', { class: 'time' },
-      ev.allDay ? 'Ganzt.' : fmtTime.format(start),
-      !ev.allDay ? el('small', {}, fmtTime.format(new Date(ev.end))) : null,
-    ),
+    withDate
+      ? el('span', { class: 'time date' },
+        dayHeading(start).startsWith('Heute') || dayHeading(start).startsWith('Morgen') ? dayHeading(start) : fmtShortDay.format(start),
+        el('small', {}, ev.allDay ? 'ganztägig' : fmtTime.format(start)),
+      )
+      : el('span', { class: 'time' },
+        ev.allDay ? 'Ganzt.' : fmtTime.format(start),
+        !ev.allDay ? el('small', {}, fmtTime.format(new Date(ev.end))) : null,
+      ),
     el('span', { class: 'info' },
       el('div', { class: 'title' }, ev.title),
-      el('div', { class: 'meta' }, [ev.calendar, ev.location].filter(Boolean).join(' · ')),
+      el('div', { class: 'meta' },
+        added ? el('span', { class: 'added' }, '✓ Widget') : null,
+        added && meta ? ' · ' : null,
+        meta,
+      ),
     ),
   );
 }
@@ -464,29 +491,121 @@ $('#confirm-form').addEventListener('submit', async (e) => {
   const btn = form.querySelector('button[type="submit"]');
   btn.disabled = true;
   try {
-    const widget = await api('/widgets', {
-      method: 'POST',
-      body: {
-        title: form.label.value.trim(),
-        start: ev.start,
-        allDay: ev.allDay,
-        location: ev.location,
-        calendar: ev.calendar,
-        color: ev.color,
-        eventId: ev.id,
-      },
-    });
-    state.widgets.push(widget);
-    renderWidgets();
+    await createWidget(ev, form.label.value.trim());
     closeSheet('#confirm-sheet');
     closeSheet('#picker-sheet');
-    toast('Widget erstellt');
   } catch (err) {
     $('#confirm-error').textContent = err.message;
     $('#confirm-error').hidden = false;
   } finally {
     btn.disabled = false;
   }
+});
+
+async function createWidget(ev, title = ev.title) {
+  const widget = await api('/widgets', {
+    method: 'POST',
+    body: {
+      title,
+      start: ev.start,
+      allDay: ev.allDay,
+      location: ev.location,
+      calendar: ev.calendar,
+      color: ev.color,
+      eventId: ev.id,
+    },
+  });
+  state.widgets.push(widget);
+  renderWidgets();
+  toast('Widget erstellt');
+  loadOverview(true);
+  return widget;
+}
+
+// ---------- Startseite: Vorschläge & nächste Termine ----------
+
+const OVERVIEW_TTL = 5 * 60 * 1000;
+
+async function loadOverview(force = false) {
+  if (!state.connected) {
+    state.overview = null;
+    renderOverview();
+    return;
+  }
+  if (!force && state.overview && Date.now() - state.overviewAt < OVERVIEW_TTL) return;
+  try {
+    const data = await api('/overview');
+    if (!data.connected) state.connected = false;
+    state.overview = data.connected ? data : null;
+    state.overviewAt = Date.now();
+  } catch (err) {
+    // Startseite soll auch ohne Kalender funktionieren – Widgets bleiben sichtbar.
+    if (err.status === 401) toast('iCloud-Anmeldung fehlgeschlagen – bitte neu verbinden');
+  }
+  renderOverview();
+}
+
+function renderOverview() {
+  const ov = state.overview;
+  $('#connect-card').hidden = state.connected;
+  $('#suggestions-section').hidden = !ov || ov.suggestions.length === 0;
+  $('#upcoming-section').hidden = !ov;
+  renderWidgets();
+  if (!ov) return;
+
+  $('#suggestions').replaceChildren(...ov.suggestions.map(suggestionNode));
+  $('#upcoming').replaceChildren(
+    ...(ov.upcoming.length
+      ? ov.upcoming.map((ev) => eventNode(ev, { withDate: true }))
+      : [el('p', { class: 'muted small' }, 'Keine anstehenden Termine.')]),
+  );
+}
+
+function suggestionNode(ev) {
+  const start = toDate(ev.start, ev.allDay);
+  const when = ev.allDay ? fmtSuggestDay.format(start) : `${fmtSuggestDay.format(start)} · ${fmtTime.format(start)}`;
+  const add = el('button', { class: 's-add', type: 'button' }, '+ Als Widget');
+  add.addEventListener('click', async () => {
+    add.disabled = true;
+    try {
+      await createWidget(ev);
+    } catch (err) {
+      toast(err.message);
+      add.disabled = false;
+    }
+  });
+  return el('div', { class: 'suggestion', style: ev.color ? `--c:${ev.color}` : null },
+    el('button', { class: 's-body', type: 'button', onclick: () => openConfirm(ev) },
+      el('div', { class: 'chips' }, (ev.reasons || []).map((r) => el('span', { class: 'chip' }, r))),
+      el('div', { class: 's-title' }, ev.title),
+      el('div', { class: 's-when' }, when),
+      el('div', { class: 's-in' }, inDays(start)),
+    ),
+    el('button', {
+      class: 's-dismiss',
+      type: 'button',
+      'aria-label': `Vorschlag „${ev.title}“ ausblenden`,
+      onclick: () => dismissSuggestion(ev),
+    }, '×'),
+    add,
+  );
+}
+
+async function dismissSuggestion(ev) {
+  state.overview.suggestions = state.overview.suggestions.filter((s) => s.id !== ev.id);
+  renderOverview();
+  try {
+    await api('/suggestions/dismiss', { method: 'POST', body: { title: ev.title } });
+    loadOverview(true);
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+$('#all-events-btn').addEventListener('click', openPicker);
+$('#connect-card-btn').addEventListener('click', () => {
+  $('#connect-error').hidden = true;
+  openSheet('#connect-sheet');
 });
 
 // ---------- Widget-Aktionen ----------
@@ -505,6 +624,7 @@ $('#widget-delete').addEventListener('click', async () => {
     await api(`/widgets/${encodeURIComponent(w.id)}`, { method: 'DELETE' });
     state.widgets = state.widgets.filter((x) => x.id !== w.id);
     renderWidgets();
+    loadOverview(true);
   } catch (err) {
     toast(err.message);
   }
@@ -530,6 +650,7 @@ $('#disconnect-btn').addEventListener('click', async () => {
   state.appleId = null;
   closeSheet('#settings-sheet');
   toast('Kalender getrennt');
+  loadOverview();
 });
 
 // ---------- Start ----------
@@ -543,9 +664,15 @@ async function init() {
   } catch (err) {
     toast('Server nicht erreichbar');
   }
-  renderWidgets();
+  renderOverview();
+  loadOverview(true);
   setInterval(tick, 1000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  setInterval(() => { if (!document.hidden) loadOverview(); }, 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    tick();
+    loadOverview();
+  });
 }
 
 init();

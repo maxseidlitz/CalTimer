@@ -2,7 +2,9 @@
 
 Countdown-Widgets für Termine aus deinem iCloud-Kalender. Läuft als Docker-Container (z. B. auf einem ZimaBoard) und wird im Heimnetz vom Handy aus als Web-App genutzt.
 
-- **Startseite:** nur deine Timer-Kacheln, sortiert nach dem nächsten Termin, live heruntergezählt
+- **Startseite:** deine Timer-Kacheln, sortiert nach dem nächsten Termin, live heruntergezählt
+- **Vorschläge:** CalTimer schaut die nächsten 120 Tage durch und schlägt Termine vor, für die sich ein Countdown lohnt (mehrtägig, ganztägig, Stichwörter wie Urlaub, Flug, Geburtstag, Konzert, Prüfung, Deadline …; wöchentliche/monatliche Routine-Termine fallen raus). **+ Als Widget** übernimmt direkt, **×** blendet den Termin-Titel dauerhaft aus.
+- **Nächste Termine:** die nächsten 5 Termine direkt auf der Startseite, ein Tipp legt ein Widget an
 - **„Widget erstellen“:** beim ersten Mal iCloud verbinden, dann Termin aus Liste (nächste 60 Tage) oder Monatsansicht wählen, Titel anpassen, fertig
 - **Kachel antippen:** löschen
 

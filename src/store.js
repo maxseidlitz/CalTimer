@@ -32,3 +32,9 @@ export const widgets = {
   all: () => readJson('widgets.json', []),
   save: (list) => writeJson('widgets.json', list),
 };
+
+// Ausgeblendete Vorschläge (normalisierte Termin-Titel).
+export const dismissed = {
+  all: () => readJson('dismissed.json', []),
+  save: (list) => writeJson('dismissed.json', list.slice(-500)),
+};

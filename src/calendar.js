@@ -130,13 +130,15 @@ export function expandObject(data, from, to, cal) {
       continue;
     }
 
+    const rrule = master.getFirstPropertyValue('rrule');
+    const repeat = rrule?.freq ? String(rrule.freq).toLowerCase() : 'yes';
     const it = event.iterator();
     let next;
     let count = 0;
     while ((next = it.next()) && count++ < MAX_OCCURRENCES) {
       if (next.toJSDate() > to) break;
       const details = event.getOccurrenceDetails(next);
-      pushInstance(out, details.item, details.startDate, details.endDate, from, to, cal);
+      pushInstance(out, details.item, details.startDate, details.endDate, from, to, cal, repeat);
     }
   }
 
@@ -151,7 +153,7 @@ export function expandObject(data, from, to, cal) {
   return out;
 }
 
-function pushInstance(out, item, start, end, from, to, cal) {
+function pushInstance(out, item, start, end, from, to, cal, repeat = null) {
   if (!start) return;
   const status = item.component.getFirstPropertyValue('status');
   if (typeof status === 'string' && status.toUpperCase() === 'CANCELLED') return;
@@ -172,6 +174,8 @@ function pushInstance(out, item, start, end, from, to, cal) {
     end: allDay ? dateOnly(end || start) : endJs.toISOString(),
     calendar: cal.name,
     color: cal.color,
+    // null = einmalig, sonst z. B. "weekly" / "yearly" – wichtig für die Vorschläge.
+    repeat,
     sortKey: startJs.getTime(),
   });
 }

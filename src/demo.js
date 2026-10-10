@@ -18,6 +18,8 @@ const TEMPLATES = [
   ['Urlaub', 0, 'Privat', null, true],
 ];
 
+const REPEAT = { 'Team-Meeting': 'weekly', 'Geburtstag Oma': 'yearly' };
+
 export function resetSession() {}
 export async function verify() { return CALENDARS; }
 export async function listCalendars() { return CALENDARS; }
@@ -36,7 +38,7 @@ export async function listEvents(_creds, from, to) {
     const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
     const start = allDay ? day : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9 + hourSeed * 3 + (i % 3), (i % 2) * 30);
     const end = allDay
-      ? new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)
+      ? new Date(day.getFullYear(), day.getMonth(), day.getDate() + (title === 'Urlaub' ? 7 : 1))
       : new Date(start.getTime() + 90 * 60 * 1000);
     if (end < from || start > to) continue;
     out.push({
@@ -49,6 +51,7 @@ export async function listEvents(_creds, from, to) {
       end: allDay ? dateOnly(end) : end.toISOString(),
       calendar: cal.name,
       color: cal.color,
+      repeat: REPEAT[title] ?? null,
     });
   }
   return out;

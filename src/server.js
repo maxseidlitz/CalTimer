@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as store from './store.js';
+import { suggest } from './suggest.js';
 
 const DEMO = process.env.DEMO === '1';
 const calendar = DEMO ? await import('./demo.js') : await import('./calendar.js');
@@ -10,6 +11,16 @@ const calendar = DEMO ? await import('./demo.js') : await import('./calendar.js'
 const PORT = Number(process.env.PORT) || 3000;
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 400;
+const OVERVIEW_DAYS = 120;
+const UPCOMING_COUNT = 5;
+
+const titleKey = (title) => title.trim().toLowerCase();
+
+function startOf(ev) {
+  if (!ev.allDay) return new Date(ev.start);
+  const [y, m, d] = ev.start.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
 
 const app = express();
 app.use(express.json({ limit: '32kb' }));
@@ -66,6 +77,46 @@ api.get('/events', async (req, res) => {
     return res.status(400).json({ error: 'Zeitraum zu groß.' });
   }
   res.json(await calendar.listEvents(creds, from, to));
+});
+
+// Startseite: nächste Termine + Widget-Vorschläge in einem Abruf.
+api.get('/overview', async (_req, res) => {
+  const creds = await store.credentials.get();
+  if (!creds) return res.json({ connected: false, upcoming: [], suggestions: [] });
+
+  const now = new Date();
+  // Auf die volle Stunde abrunden, damit der Event-Cache greift.
+  const from = new Date(now);
+  from.setMinutes(0, 0, 0);
+  const to = new Date(from.getTime() + OVERVIEW_DAYS * DAY);
+  const events = await calendar.listEvents(creds, from, to);
+
+  const [widgetList, dismissedList] = await Promise.all([store.widgets.all(), store.dismissed.all()]);
+  const added = new Set(widgetList.map((w) => w.eventId).filter(Boolean));
+  // Titel mit kommendem Widget oder ausgeblendete Titel nicht (nochmal) vorschlagen.
+  const hiddenTitles = new Set([
+    ...widgetList.filter((w) => startOf(w) > now).map((w) => titleKey(w.title)),
+    ...dismissedList,
+  ]);
+  const future = events.filter((ev) => startOf(ev) > now);
+
+  res.json({
+    connected: true,
+    upcoming: future.slice(0, UPCOMING_COUNT).map((ev) => ({ ...ev, added: added.has(ev.id) })),
+    suggestions: suggest(
+      future.filter((ev) => !hiddenTitles.has(titleKey(ev.title))),
+      { exclude: added, now },
+    ),
+  });
+});
+
+api.post('/suggestions/dismiss', async (req, res) => {
+  const key = titleKey(String(req.body?.title ?? '').slice(0, 200));
+  if (!key) return res.status(400).json({ error: 'Titel fehlt.' });
+  const list = await store.dismissed.all();
+  if (!list.includes(key)) list.push(key);
+  await store.dismissed.save(list);
+  res.status(204).end();
 });
 
 api.get('/widgets', async (_req, res) => {

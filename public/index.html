@@ -30,6 +30,28 @@
       <p class="empty-title">Noch keine Timer</p>
       <p class="muted">Wähle einen Termin aus deinem Kalender – CalTimer zählt bis dahin herunter.</p>
     </div>
+    <p id="empty-hint" class="empty-hint muted" hidden>Noch keine Timer. Übernimm einen Vorschlag mit <strong>+</strong> oder tippe auf einen Termin.</p>
+
+    <div id="connect-card" class="connect-card" hidden>
+      <div>
+        <strong>Kalender verbinden</strong>
+        <p class="muted small">Dann siehst du hier deine nächsten Termine und Vorschläge für neue Widgets.</p>
+      </div>
+      <button class="primary compact" id="connect-card-btn" type="button">Verbinden</button>
+    </div>
+
+    <section id="suggestions-section" class="home-section" hidden>
+      <h2 class="section-title">Vorschläge</h2>
+      <div id="suggestions" class="suggestion-row"></div>
+    </section>
+
+    <section id="upcoming-section" class="home-section" hidden>
+      <div class="section-head">
+        <h2 class="section-title">Nächste Termine</h2>
+        <button class="text-btn" id="all-events-btn" type="button">Alle anzeigen</button>
+      </div>
+      <div id="upcoming"></div>
+    </section>
   </main>
 
   <button class="fab" id="add-btn">
