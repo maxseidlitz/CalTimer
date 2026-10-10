@@ -3,6 +3,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as store from './store.js';
+import * as auth from './auth.js';
+import { hostCheck, originCheck, securityHeaders } from './security.js';
 import { suggest } from './suggest.js';
 
 const DEMO = process.env.DEMO === '1';
@@ -13,6 +15,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 400;
 const OVERVIEW_DAYS = 120;
 const UPCOMING_COUNT = 5;
+const MAX_FEEDS = 20;
 
 const titleKey = (title) => title.trim().toLowerCase();
 
@@ -22,74 +25,101 @@ function startOf(ev) {
   return new Date(y, m - 1, d);
 }
 
+// Für die App: nie den vollständigen (geheimen) Link herausgeben.
+const publicFeed = ({ id, name, color, url }) => ({ id, name, color, hint: calendar.maskUrl(url) });
+
+await store.removeLegacyCredentials();
+await auth.init();
+
 const app = express();
-app.use(express.json({ limit: '32kb' }));
-app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public')));
+app.disable('x-powered-by');
+app.set('trust proxy', false);
+app.use(hostCheck);
+app.use(securityHeaders);
+app.use(express.json({ limit: '16kb' }));
+app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public'), {
+  index: 'index.html',
+  setHeaders: (res) => res.set('Cache-Control', 'no-cache'),
+}));
 
 const api = express.Router();
+api.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+api.use(originCheck);
 
-async function requireCreds() {
-  const creds = await store.credentials.get();
-  if (!creds) {
+// Öffentlich: Healthcheck und Anmeldung.
+api.get('/health', (_req, res) => res.json({ ok: true }));
+auth.routes(api);
+
+// Alles Weitere nur mit gültiger Sitzung.
+api.use(auth.requireAuth);
+
+api.get('/status', async (_req, res) => {
+  const feeds = await store.feeds.all();
+  res.json({ connected: feeds.length > 0, calendars: feeds.map(publicFeed), demo: DEMO });
+});
+
+api.post('/calendars', async (req, res) => {
+  const feeds = await store.feeds.all();
+  if (feeds.length >= MAX_FEEDS) return res.status(400).json({ error: 'Maximal 20 Kalender.' });
+
+  const info = await calendar.inspectFeed(String(req.body?.url ?? '').slice(0, 2048), feeds.length);
+  if (feeds.some((f) => f.url === info.url)) {
+    return res.status(409).json({ error: 'Dieser Kalender ist schon hinzugefügt.' });
+  }
+  const customName = String(req.body?.name ?? '').trim().slice(0, 60);
+  const feed = { id: randomUUID(), ...info, name: customName || info.name, addedAt: new Date().toISOString() };
+  feeds.push(feed);
+  await store.feeds.save(feeds);
+  calendar.resetCache();
+  res.status(201).json(publicFeed(feed));
+});
+
+api.delete('/calendars/:id', async (req, res) => {
+  const feeds = await store.feeds.all();
+  const next = feeds.filter((f) => f.id !== req.params.id);
+  if (next.length === feeds.length) return res.status(404).json({ error: 'Kalender nicht gefunden.' });
+  await store.feeds.save(next);
+  calendar.resetCache();
+  res.status(204).end();
+});
+
+async function requireFeeds() {
+  const feeds = await store.feeds.all();
+  if (!feeds.length) {
     const err = new Error('Kein Kalender verbunden.');
     err.status = 409;
     throw err;
   }
-  return creds;
+  return feeds;
 }
 
-api.get('/status', async (_req, res) => {
-  const creds = await store.credentials.get();
-  res.json({ connected: Boolean(creds), appleId: creds?.appleId ?? null });
-});
-
-api.post('/connect', async (req, res) => {
-  const appleId = String(req.body?.appleId ?? '').trim();
-  // App-spezifische Passwörter werden oft mit Bindestrichen/Leerzeichen kopiert.
-  const password = String(req.body?.password ?? '').replace(/\s+/g, '');
-  if (!appleId || !password) {
-    return res.status(400).json({ error: 'Apple-ID und Passwort angeben.' });
-  }
-  const creds = { appleId, password };
-  const calendars = await calendar.verify(creds);
-  await store.credentials.set(creds);
-  res.json({ connected: true, appleId, calendars });
-});
-
-api.delete('/connect', async (_req, res) => {
-  await store.credentials.clear();
-  calendar.resetSession();
-  res.json({ connected: false });
-});
-
-api.get('/calendars', async (_req, res) => {
-  res.json(await calendar.listCalendars(await requireCreds()));
-});
-
 api.get('/events', async (req, res) => {
-  const creds = await requireCreds();
-  const from = req.query.from ? new Date(req.query.from) : new Date();
-  const to = req.query.to ? new Date(req.query.to) : new Date(from.getTime() + 60 * DAY);
+  const feeds = await requireFeeds();
+  const from = req.query.from ? new Date(String(req.query.from)) : new Date();
+  const to = req.query.to ? new Date(String(req.query.to)) : new Date(from.getTime() + 60 * DAY);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
     return res.status(400).json({ error: 'Ungültiger Zeitraum.' });
   }
   if (to - from > MAX_RANGE_DAYS * DAY) {
     return res.status(400).json({ error: 'Zeitraum zu groß.' });
   }
-  res.json(await calendar.listEvents(creds, from, to));
+  res.json(await calendar.listEvents(feeds, from, to));
 });
 
 // Startseite: nächste Termine + Widget-Vorschläge in einem Abruf.
 api.get('/overview', async (_req, res) => {
-  const creds = await store.credentials.get();
-  if (!creds) return res.json({ connected: false, upcoming: [], suggestions: [] });
+  const feeds = await store.feeds.all();
+  if (!feeds.length) return res.json({ connected: false, upcoming: [], suggestions: [], errors: [] });
 
   const now = new Date();
   // Auf die volle Stunde abrunden, damit der Event-Cache greift.
   const from = new Date(now);
   from.setMinutes(0, 0, 0);
   const to = new Date(from.getTime() + OVERVIEW_DAYS * DAY);
-  const events = await calendar.listEvents(creds, from, to);
+  const { events, errors } = await calendar.listEvents(feeds, from, to);
 
   const [widgetList, dismissedList] = await Promise.all([store.widgets.all(), store.dismissed.all()]);
   const added = new Set(widgetList.map((w) => w.eventId).filter(Boolean));
@@ -102,6 +132,7 @@ api.get('/overview', async (_req, res) => {
 
   res.json({
     connected: true,
+    errors,
     upcoming: future.slice(0, UPCOMING_COUNT).map((ev) => ({ ...ev, added: added.has(ev.id) })),
     suggestions: suggest(
       future.filter((ev) => !hiddenTitles.has(titleKey(ev.title))),
@@ -132,6 +163,8 @@ api.post('/widgets', async (req, res) => {
   if (!title || !validStart) {
     return res.status(400).json({ error: 'Titel und Startzeit werden benötigt.' });
   }
+  const list = await store.widgets.all();
+  if (list.length >= 200) return res.status(400).json({ error: 'Maximal 200 Widgets.' });
   const widget = {
     id: randomUUID(),
     title,
@@ -143,7 +176,6 @@ api.post('/widgets', async (req, res) => {
     eventId: b.eventId ? String(b.eventId).slice(0, 500) : null,
     createdAt: new Date().toISOString(),
   };
-  const list = await store.widgets.all();
   list.push(widget);
   await store.widgets.save(list);
   res.status(201).json(widget);
@@ -157,17 +189,22 @@ api.delete('/widgets/:id', async (req, res) => {
   res.status(204).end();
 });
 
+api.use((_req, res) => res.status(404).json({ error: 'Nicht gefunden.' }));
+
 app.use('/api', api);
 
 app.use((err, _req, res, _next) => {
-  if (err instanceof calendar.AuthError) {
-    return res.status(401).json({ error: err.message });
+  if (err instanceof calendar.FeedError) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (err.type === 'entity.parse.failed' || err.type === 'entity.too.large') {
+    return res.status(400).json({ error: 'Ungültige Anfrage.' });
   }
   const status = err.status || 500;
   if (status >= 500) console.error(err);
-  res.status(status).json({ error: status >= 500 ? 'Fehler beim Abrufen des Kalenders.' : err.message });
+  res.status(status).json({ error: status >= 500 ? 'Interner Fehler.' : err.message });
 });
 
 app.listen(PORT, () => {
-  console.log(`CalTimer läuft auf http://0.0.0.0:${PORT}${DEMO ? ' (Demo-Modus)' : ''}`);
+  console.log(`CalTimer läuft auf Port ${PORT}${DEMO ? ' (Demo-Modus)' : ''}`);
 });

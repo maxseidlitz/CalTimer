@@ -4,7 +4,8 @@ const LIST_DAYS = 60;
 
 const state = {
   connected: false,
-  appleId: null,
+  calendars: [],
+  started: false,
   widgets: [],
   listEvents: null,
   listUntil: null,
@@ -27,6 +28,8 @@ async function api(path, options = {}) {
   });
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
+  // Sitzung abgelaufen oder abgemeldet → Anmeldebildschirm.
+  if (res.status === 401 && data.code === 'auth') showAuth({ setupRequired: false });
   if (!res.ok) {
     const err = new Error(data.error || `Fehler ${res.status}`);
     err.status = res.status;
@@ -232,25 +235,27 @@ $('#connect-form').addEventListener('submit', async (e) => {
   const err = $('#connect-error');
   err.hidden = true;
   btn.disabled = true;
-  btn.textContent = 'Verbinde …';
+  btn.textContent = 'Prüfe Kalender …';
   try {
-    const res = await api('/connect', {
+    const cal = await api('/calendars', {
       method: 'POST',
-      body: { appleId: form.appleId.value, password: form.password.value },
+      body: { url: form.url.value, name: form.elements.name.value },
     });
+    const first = !state.connected;
+    state.calendars.push(cal);
     state.connected = true;
-    state.appleId = res.appleId;
-    form.password.value = '';
+    form.reset();
     closeSheet('#connect-sheet');
-    toast(`${res.calendars.length} Kalender verbunden`);
+    toast(`„${cal.name}“ hinzugefügt`);
+    renderSettings();
     loadOverview(true);
-    openPicker();
+    if (first && $('#settings-sheet').hidden) openPicker();
   } catch (ex) {
     err.textContent = ex.message;
     err.hidden = false;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Zugriff erlauben';
+    btn.textContent = 'Kalender hinzufügen';
   }
 });
 
@@ -282,12 +287,11 @@ function loadingNode(text = 'Lade Termine …') {
 }
 
 function handleCalendarError(err, container) {
-  if (err.status === 401 || err.status === 409) {
+  if (err.status === 401) return;
+  if (err.status === 409) {
     state.connected = false;
     closeSheet('#picker-sheet');
-    $('#connect-error').textContent = err.status === 401
-      ? 'Die Anmeldung bei iCloud ist fehlgeschlagen. Bitte neu verbinden.'
-      : 'Bitte verbinde zuerst deinen Kalender.';
+    $('#connect-error').textContent = 'Bitte füge zuerst einen Kalender hinzu.';
     $('#connect-error').hidden = false;
     openSheet('#connect-sheet');
     return;
@@ -302,7 +306,8 @@ async function loadList(extraDays = 0) {
   const to = new Date((extraDays ? from : now).getTime() + (extraDays || LIST_DAYS) * DAY);
   if (!extraDays) box.replaceChildren(loadingNode());
   try {
-    const events = await api(`/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
+    const { events, errors } = await api(`/events?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`);
+    showFeedErrors(errors);
     const seen = new Set((state.listEvents || []).map((e) => e.id));
     // Bereits laufende Termine (Start in der Vergangenheit) sind kein sinnvolles Countdown-Ziel.
     const upcoming = events.filter((ev) => toDate(ev.start, ev.allDay) > now && !seen.has(ev.id));
@@ -404,7 +409,8 @@ async function renderMonth() {
     drawMonthGrid(start, new Map());
     $('#day-events').replaceChildren(loadingNode());
     try {
-      const events = await api(`/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`);
+      const { events, errors } = await api(`/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`);
+      showFeedErrors(errors);
       state.monthEvents.set(key, events);
     } catch (err) {
       handleCalendarError(err, $('#day-events'));
@@ -538,9 +544,9 @@ async function loadOverview(force = false) {
     if (!data.connected) state.connected = false;
     state.overview = data.connected ? data : null;
     state.overviewAt = Date.now();
-  } catch (err) {
+    showFeedErrors(data.errors);
+  } catch {
     // Startseite soll auch ohne Kalender funktionieren – Widgets bleiben sichtbar.
-    if (err.status === 401) toast('iCloud-Anmeldung fehlgeschlagen – bitte neu verbinden');
   }
   renderOverview();
 }
@@ -602,6 +608,13 @@ async function dismissSuggestion(ev) {
   }
 }
 
+let lastFeedError = '';
+function showFeedErrors(errors = []) {
+  const msg = errors.map((e) => `${e.calendar}: ${e.error}`).join(' · ');
+  if (msg && msg !== lastFeedError) toast(msg);
+  lastFeedError = msg;
+}
+
 $('#all-events-btn').addEventListener('click', openPicker);
 $('#connect-card-btn').addEventListener('click', () => {
   $('#connect-error').hidden = true;
@@ -632,47 +645,143 @@ $('#widget-delete').addEventListener('click', async () => {
 
 // ---------- Einstellungen ----------
 
+function renderSettings() {
+  const box = $('#settings-calendars');
+  if (!state.calendars.length) {
+    box.replaceChildren(el('div', { class: 'cal-empty' }, 'Noch kein Kalender freigegeben.'));
+    return;
+  }
+  box.replaceChildren(...state.calendars.map((cal) =>
+    el('div', { class: 'cal-row', style: cal.color ? `--c:${cal.color}` : null },
+      el('span', { class: 'dot' }),
+      el('div', { class: 'info' },
+        el('div', { class: 'name' }, cal.name),
+        el('div', { class: 'hint' }, cal.hint),
+      ),
+      el('button', { class: 'remove', type: 'button', onclick: () => removeCalendar(cal) }, 'Entfernen'),
+    ),
+  ));
+}
+
+async function removeCalendar(cal) {
+  if (!confirm(`„${cal.name}“ entfernen? Deine Widgets bleiben erhalten.\n\nTipp: Schalte „Öffentlicher Kalender“ auf dem iPhone ebenfalls aus, damit der Link ungültig wird.`)) return;
+  try {
+    await api(`/calendars/${encodeURIComponent(cal.id)}`, { method: 'DELETE' });
+    state.calendars = state.calendars.filter((c) => c.id !== cal.id);
+    state.connected = state.calendars.length > 0;
+    renderSettings();
+    loadOverview(true);
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
 $('#settings-btn').addEventListener('click', () => {
-  const status = $('#settings-status');
-  status.replaceChildren(
-    state.connected
-      ? el('div', {}, el('strong', {}, 'iCloud verbunden'), el('div', { class: 'muted small' }, state.appleId))
-      : el('div', {}, el('strong', {}, 'Kein Kalender verbunden'), el('div', { class: 'muted small' }, 'Wird beim Erstellen des ersten Widgets eingerichtet.')),
-  );
-  $('#disconnect-btn').hidden = !state.connected;
+  renderSettings();
   openSheet('#settings-sheet');
 });
 
-$('#disconnect-btn').addEventListener('click', async () => {
-  if (!confirm('Kalender wirklich trennen? Deine Widgets bleiben erhalten.')) return;
-  await api('/connect', { method: 'DELETE' });
-  state.connected = false;
-  state.appleId = null;
-  closeSheet('#settings-sheet');
-  toast('Kalender getrennt');
-  loadOverview();
+$('#add-calendar-btn').addEventListener('click', () => {
+  $('#connect-error').hidden = true;
+  openSheet('#connect-sheet');
+});
+
+$('#logout-btn').addEventListener('click', async () => {
+  await api('/auth/logout', { method: 'POST' }).catch(() => {});
+  location.reload();
+});
+
+$('#logout-all-btn').addEventListener('click', async () => {
+  if (!confirm('Alle Geräte abmelden? Du musst dich danach überall neu anmelden.')) return;
+  await api('/auth/logout-all', { method: 'POST' }).catch(() => {});
+  location.reload();
+});
+
+// ---------- Anmeldung ----------
+
+let authMode = 'login';
+
+function showAuth({ setupRequired }) {
+  authMode = setupRequired ? 'setup' : 'login';
+  for (const sheet of document.querySelectorAll('.sheet, .action-sheet')) sheet.hidden = true;
+  $('#auth-title').textContent = setupRequired ? 'CalTimer einrichten' : 'CalTimer';
+  $('#auth-text').textContent = setupRequired
+    ? 'Lege eine Passphrase fest (mind. 10 Zeichen). Den Einrichtungscode findest du im Log des Containers.'
+    : 'Bitte mit deiner Passphrase anmelden.';
+  $('#auth-code-label').hidden = !setupRequired;
+  $('#auth-repeat-label').hidden = !setupRequired;
+  $('#auth-form').code.required = setupRequired;
+  $('#auth-form').passphrase.autocomplete = setupRequired ? 'new-password' : 'current-password';
+  $('#auth-submit').textContent = setupRequired ? 'Einrichten' : 'Anmelden';
+  $('#auth-error').hidden = true;
+  $('#auth-screen').hidden = false;
+}
+
+$('#auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  const err = $('#auth-error');
+  const btn = $('#auth-submit');
+  err.hidden = true;
+  if (authMode === 'setup' && form.passphrase.value !== form.repeat.value) {
+    err.textContent = 'Die Passphrasen stimmen nicht überein.';
+    err.hidden = false;
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await api(authMode === 'setup' ? '/auth/setup' : '/auth/login', {
+      method: 'POST',
+      body: { code: form.code.value, passphrase: form.passphrase.value },
+    });
+    form.reset();
+    $('#auth-screen').hidden = true;
+    start();
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ---------- Start ----------
 
-async function init() {
+async function start() {
   try {
     const [status, widgets] = await Promise.all([api('/status'), api('/widgets')]);
     state.connected = status.connected;
-    state.appleId = status.appleId;
+    state.calendars = status.calendars;
     state.widgets = widgets;
   } catch (err) {
-    toast('Server nicht erreichbar');
+    if (err.status !== 401) toast('Server nicht erreichbar');
+    return;
   }
   renderOverview();
   loadOverview(true);
+  if (state.started) return;
+  state.started = true;
   setInterval(tick, 1000);
-  setInterval(() => { if (!document.hidden) loadOverview(); }, 60 * 1000);
+  setInterval(() => { if (!document.hidden && $('#auth-screen').hidden) loadOverview(); }, 60 * 1000);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) return;
+    if (document.hidden || !$('#auth-screen').hidden) return;
     tick();
     loadOverview();
   });
+}
+
+async function init() {
+  try {
+    const auth = await api('/auth/status');
+    if (!auth.authenticated) {
+      showAuth(auth);
+      return;
+    }
+  } catch {
+    toast('Server nicht erreichbar');
+    return;
+  }
+  start();
 }
 
 init();

@@ -283,3 +283,43 @@ main { padding: 8px 16px; max-width: 900px; margin: 0 auto; }
 
 .event .time.date { width: 64px; white-space: nowrap; }
 .event .added { color: #34c759; font-weight: 700; }
+
+/* ---------- Anmeldung & Einstellungen ---------- */
+.auth-screen {
+  position: fixed; inset: 0; z-index: 50; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(24px + var(--safe-top)) 20px calc(24px + var(--safe-bottom));
+  overflow-y: auto;
+}
+.auth-box { width: 100%; max-width: 380px; text-align: center; }
+.auth-box img { border-radius: 18px; }
+.auth-box h2 { font-size: 26px; font-weight: 800; margin: 14px 0 6px; letter-spacing: -0.02em; }
+.auth-box .form { text-align: left; }
+
+.settings-label {
+  font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+  font-weight: 700; margin: 22px 4px 8px;
+}
+.settings-label:first-child { margin-top: 4px; }
+.list-card { padding: 0; overflow: hidden; }
+.cal-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.cal-row:last-child { border-bottom: 0; }
+.cal-row .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c, var(--accent)); flex: none; }
+.cal-row .info { flex: 1; min-width: 0; }
+.cal-row .name { font-weight: 600; }
+.cal-row .hint { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-row .remove { border: 0; background: none; color: var(--danger); font-weight: 600; font-size: 14px; padding: 6px; }
+.cal-empty { padding: 14px; color: var(--muted); font-size: 14px; }
+.secondary {
+  width: 100%; margin-top: 10px; border: 0; border-radius: 14px; padding: 14px;
+  background: var(--surface); color: var(--accent); font-weight: 700; font-size: 16px;
+}
+.row-btn {
+  display: block; width: 100%; text-align: left; border: 0; background: none;
+  padding: 14px; font-size: 16px; font-weight: 600; border-bottom: 1px solid var(--line);
+}
+.row-btn:last-child { border-bottom: 0; }
+.warning {
+  background: color-mix(in srgb, #ff9f0a 16%, transparent); color: var(--text);
+  border-radius: 14px; padding: 10px 14px; font-size: 14px; margin-top: 16px;
+}

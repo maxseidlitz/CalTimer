@@ -1,5 +1,8 @@
 // Demo-Kalender mit Beispielterminen, aktiv mit DEMO=1 – zum Ausprobieren ohne iCloud.
-export { AuthError } from './calendar.js';
+// Jeder iCloud-förmige Link wird akzeptiert; es wird nichts heruntergeladen.
+import { normalizeFeedUrl } from './calendar.js';
+
+export { FeedError, normalizeFeedUrl, maskUrl } from './calendar.js';
 
 const CALENDARS = [
   { url: 'demo:privat', name: 'Privat', color: '#ff6a3d' },
@@ -20,11 +23,15 @@ const TEMPLATES = [
 
 const REPEAT = { 'Team-Meeting': 'weekly', 'Geburtstag Oma': 'yearly' };
 
-export function resetSession() {}
-export async function verify() { return CALENDARS; }
-export async function listCalendars() { return CALENDARS; }
+export function resetCache() {}
 
-export async function listEvents(_creds, from, to) {
+export async function inspectFeed(rawUrl, index = 0) {
+  const cal = CALENDARS[index % CALENDARS.length];
+  return { url: normalizeFeedUrl(rawUrl), name: cal.name, color: cal.color };
+}
+
+export async function listEvents(feeds, from, to) {
+  const names = new Set(feeds.map((f) => f.name));
   const out = [];
   const pad = (n) => String(n).padStart(2, '0');
   const dateOnly = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -35,6 +42,7 @@ export async function listEvents(_creds, from, to) {
     if ((i * 7 + 3) % 5 > 1) continue;
     const [title, hourSeed, calName, location, allDay] = TEMPLATES[((i % TEMPLATES.length) + TEMPLATES.length) % TEMPLATES.length];
     const cal = CALENDARS.find((c) => c.name === calName);
+    if (!names.has(cal.name)) continue;
     const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
     const start = allDay ? day : new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9 + hourSeed * 3 + (i % 3), (i % 2) * 30);
     const end = allDay
@@ -54,5 +62,5 @@ export async function listEvents(_creds, from, to) {
       repeat: REPEAT[title] ?? null,
     });
   }
-  return out;
+  return { events: out, errors: [] };
 }

@@ -59,30 +59,31 @@
     Widget erstellen
   </button>
 
-  <!-- Kalender verbinden -->
+  <!-- Kalender hinzufügen -->
   <section class="sheet" id="connect-sheet" aria-labelledby="connect-title" hidden>
     <div class="sheet-head">
       <button class="text-btn" data-close>Abbrechen</button>
-      <h2 id="connect-title">Kalender verbinden</h2>
+      <h2 id="connect-title">Kalender hinzufügen</h2>
       <span></span>
     </div>
     <div class="sheet-body">
-      <p class="lead">CalTimer möchte auf deinen iCloud-Kalender zugreifen.</p>
-      <p class="muted">Web-Apps können den Kalender auf dem Handy nicht direkt lesen. Deshalb verbindet sich CalTimer über ein <strong>app-spezifisches Passwort</strong> mit iCloud. Das Passwort hat nur Zugriff auf Kalender, Kontakte & Co. und lässt sich jederzeit widerrufen.</p>
+      <p class="lead">Kalender per Link freigeben</p>
+      <p class="muted">CalTimer bekommt <strong>kein iCloud-Passwort</strong>. Stattdessen gibst du einzelne Kalender über einen geheimen Link frei – CalTimer kann damit nur diese Termine lesen, nichts sonst.</p>
       <ol class="steps">
-        <li>Öffne <a href="https://account.apple.com/account/manage" target="_blank" rel="noopener">account.apple.com</a> → <em>Anmelden und Sicherheit</em> → <em>App-spezifische Passwörter</em>.</li>
-        <li>Erstelle ein neues Passwort, z. B. mit dem Namen „CalTimer“.</li>
-        <li>Trage es hier zusammen mit deiner Apple-ID ein.</li>
+        <li>iPhone: <em>Kalender</em>-App → unten <em>Kalender</em> → <strong>(i)</strong> neben dem gewünschten Kalender.</li>
+        <li><em>Öffentlicher Kalender</em> einschalten → <em>Link teilen …</em> → <em>Kopieren</em>.</li>
+        <li>Link hier einfügen. Für weitere Kalender einfach wiederholen.</li>
       </ol>
+      <p class="muted small">Behandle den Link wie ein Passwort: Wer ihn kennt, kann diesen Kalender lesen. Ausschalten und wieder einschalten erzeugt einen neuen Link.</p>
       <form id="connect-form" class="form">
-        <label>Apple-ID (E-Mail)
-          <input type="email" name="appleId" autocomplete="username" required inputmode="email">
+        <label>Kalender-Link
+          <input type="url" name="url" placeholder="webcal://p…-caldav.icloud.com/published/…" autocomplete="off" autocapitalize="off" spellcheck="false" required>
         </label>
-        <label>App-spezifisches Passwort
-          <input type="password" name="password" autocomplete="off" placeholder="xxxx-xxxx-xxxx-xxxx" required>
+        <label>Name (optional)
+          <input type="text" name="name" maxlength="60" placeholder="wird aus dem Kalender übernommen">
         </label>
         <p class="error" id="connect-error" hidden></p>
-        <button class="primary" type="submit">Zugriff erlauben</button>
+        <button class="primary" type="submit">Kalender hinzufügen</button>
       </form>
     </div>
   </section>
@@ -139,9 +140,38 @@
       <button class="text-btn" data-close>Fertig</button>
     </div>
     <div class="sheet-body">
-      <div class="card" id="settings-status"></div>
-      <button class="danger" id="disconnect-btn" hidden>Kalender trennen</button>
+      <h3 class="settings-label">Kalender</h3>
+      <div class="card list-card" id="settings-calendars"></div>
+      <button class="secondary" id="add-calendar-btn" type="button">+ Kalender hinzufügen</button>
+
+      <h3 class="settings-label">Sicherheit</h3>
+      <div class="card list-card">
+        <button class="row-btn" id="logout-btn" type="button">Abmelden</button>
+        <button class="row-btn danger-text" id="logout-all-btn" type="button">Alle Geräte abmelden</button>
+      </div>
       <p class="muted small">Tipp: In Safari über „Teilen → Zum Home-Bildschirm“ wird CalTimer wie eine App im Vollbild geöffnet.</p>
+    </div>
+  </section>
+
+  <!-- Anmeldung -->
+  <section class="auth-screen" id="auth-screen" hidden>
+    <div class="auth-box">
+      <img src="icon.svg" alt="" width="72" height="72">
+      <h2 id="auth-title">CalTimer</h2>
+      <p class="muted" id="auth-text"></p>
+      <form id="auth-form" class="form">
+        <label id="auth-code-label" hidden>Einrichtungscode
+          <input type="text" name="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX">
+        </label>
+        <label>Passphrase
+          <input type="password" name="passphrase" autocomplete="current-password" required minlength="10">
+        </label>
+        <label id="auth-repeat-label" hidden>Passphrase wiederholen
+          <input type="password" name="repeat" autocomplete="new-password">
+        </label>
+        <p class="error" id="auth-error" hidden></p>
+        <button class="primary" type="submit" id="auth-submit">Anmelden</button>
+      </form>
     </div>
   </section>
 
