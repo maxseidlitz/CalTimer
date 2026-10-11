@@ -96,7 +96,8 @@ async function createSession(req, res) {
     // nach der HTTP-Warnung) teils als fremde Navigation und schickt Strict-Cookies dann
     // nicht mit. CSRF bleibt abgewehrt: Änderungen nur per POST/DELETE + Origin-Prüfung.
     sameSite: 'lax',
-    secure: req.secure,
+    // Über HTTPS (direkt oder via Tailscale-Proxy) nur verschlüsselt senden.
+    secure: req.secure || req.headers['x-forwarded-proto'] === 'https',
     path: '/',
     maxAge: SESSION_MS,
   });

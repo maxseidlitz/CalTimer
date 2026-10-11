@@ -48,6 +48,15 @@ sudo docker logs caltimer        # zeigt den Einrichtungscode
 
 Dann am Handy `http://<IP-des-ZimaBoards>:3000` öffnen, Einrichtungscode + eigene Passphrase eingeben, in Safari **Teilen → Zum Home-Bildschirm**. Die Home-Bildschirm-App hat einen eigenen Speicher – dort einmal mit der Passphrase anmelden.
 
+## HTTPS über Tailscale (ohne „Nicht sicher“-Warnung)
+
+1. [Tailscale-Admin](https://login.tailscale.com/admin/dns): **MagicDNS** und **HTTPS Certificates** aktivieren
+2. ZimaOS: Tailscale aus dem App Store installieren und anmelden; iPhone: Tailscale-App installieren, gleiches Konto
+3. Per SSH: `sudo docker exec <tailscale-container> tailscale serve --bg http://<LAN-IP>:3000`
+4. Am iPhone `https://<gerät>.<tailnet>.ts.net` öffnen und neu zum Home-Bildschirm hinzufügen
+
+`*.ts.net`-Adressen sind automatisch erlaubt.
+
 ## Kalender freigeben
 
 1. iPhone: **Kalender**-App → unten **Kalender** → **(i)** neben dem Kalender
@@ -73,7 +82,7 @@ Widgets und Kalender bleiben erhalten.
 | `PORT`          | `3000`          | HTTP-Port                                                        |
 | `DATA_DIR`      | `./data`        | Speicherort für Passphrase-Hash, Sitzungen, Kalender, Widgets    |
 | `TZ`            | `Europe/Berlin` | Zeitzone für Termine ohne Zeitzone                               |
-| `ALLOWED_HOSTS` | –               | Zusätzliche Hostnamen (kommagetrennt). IPs, `localhost` und `*.local` sind immer erlaubt |
+| `ALLOWED_HOSTS` | –               | Zusätzliche Hostnamen (kommagetrennt). IPs, `localhost`, `*.local` und `*.ts.net` sind immer erlaubt |
 | `DEMO`          | –               | `1` = Demo-Kalender statt iCloud                                 |
 
 ## Lokal entwickeln

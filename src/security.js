@@ -18,13 +18,15 @@ function hostname(hostHeader) {
 /**
  * Schutz gegen DNS-Rebinding: Eine fremde Webseite kann ihre Domain auf die IP
  * des ZimaBoards zeigen lassen – der Host-Header bleibt dann aber ihre Domain.
- * Erlaubt sind daher nur IP-Adressen, localhost, *.local und ALLOWED_HOSTS.
+ * Erlaubt sind daher nur IP-Adressen, localhost, *.local, *.ts.net und ALLOWED_HOSTS.
+ * *.ts.net-Namen vergibt ausschließlich Tailscale für Geräte im eigenen Tailnet –
+ * eine fremde Seite kann sie nicht auf das ZimaBoard zeigen lassen.
  */
 export function isAllowedHost(hostHeader) {
   const h = hostname(hostHeader);
   if (!h) return false;
   if (net.isIP(h)) return true;
-  if (h === 'localhost' || h.endsWith('.local')) return true;
+  if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.ts.net')) return true;
   return EXTRA_HOSTS.has(h);
 }
 
@@ -44,7 +46,12 @@ export function originCheck(req, res, next) {
     } catch {
       originHost = null;
     }
-    if (originHost !== String(req.headers.host).toLowerCase()) {
+    // Hinter einem Reverse-Proxy (z. B. „tailscale serve“) kann der Host umgeschrieben sein;
+    // X-Forwarded-Host kann eine fremde Seite im Browser nicht setzen (Preflight).
+    const allowed = [req.headers.host, req.headers['x-forwarded-host']]
+      .filter(Boolean)
+      .map((h) => String(h).toLowerCase());
+    if (!allowed.includes(originHost)) {
       return res.status(403).json({ error: 'Anfrage von fremder Seite abgelehnt.' });
     }
   } else if (req.headers['sec-fetch-site'] && req.headers['sec-fetch-site'] !== 'same-origin') {
