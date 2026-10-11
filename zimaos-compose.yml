@@ -6,9 +6,12 @@ services:
     image: ghcr.io/maxseidlitz/caltimer:latest
     container_name: caltimer
     restart: unless-stopped
+    # Nur lokal auf dem ZimaBoard erreichbar – von außen kommt man ausschließlich
+    # über „tailscale serve“ (HTTPS, nur Tailnet) heran, nicht mehr per http://<IP>:3000.
     ports:
       - target: 3000
         published: "3000"
+        host_ip: 127.0.0.1
         protocol: tcp
     environment:
       - TZ=Europe/Berlin

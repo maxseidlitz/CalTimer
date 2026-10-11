@@ -52,7 +52,7 @@ Dann am Handy `http://<IP-des-ZimaBoards>:3000` öffnen, Einrichtungscode + eige
 
 1. [Tailscale-Admin](https://login.tailscale.com/admin/dns): **MagicDNS** und **HTTPS Certificates** aktivieren
 2. ZimaOS: Tailscale aus dem App Store installieren und anmelden; iPhone: Tailscale-App installieren, gleiches Konto
-3. Per SSH: `sudo docker exec <tailscale-container> tailscale serve --bg http://<LAN-IP>:3000`
+3. Per SSH: `sudo docker exec <tailscale-container> tailscale serve --bg http://127.0.0.1:3000` (Tailscale-Container im Host-Netzwerk; `zimaos-compose.yml` gibt Port 3000 nur auf 127.0.0.1 frei)
 4. Am iPhone `https://<gerät>.<tailnet>.ts.net` öffnen und neu zum Home-Bildschirm hinzufügen
 
 `*.ts.net`-Adressen sind automatisch erlaubt.
