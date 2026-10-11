@@ -37,9 +37,13 @@ app.set('trust proxy', false);
 app.use(hostCheck);
 app.use(securityHeaders);
 app.use(express.json({ limit: '16kb' }));
-app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public'), {
+const WEB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist');
+app.use(express.static(WEB_DIR, {
   index: 'index.html',
-  setHeaders: (res) => res.set('Cache-Control', 'no-cache'),
+  // Gehashte Build-Dateien dürfen lange gecacht werden, alles andere wird neu geprüft.
+  setHeaders: (res, file) => res.set('Cache-Control', file.includes(`${path.sep}assets${path.sep}`)
+    ? 'public, max-age=31536000, immutable'
+    : 'no-cache'),
 }));
 
 const api = express.Router();

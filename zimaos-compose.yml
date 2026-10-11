@@ -45,7 +45,7 @@ x-casaos:
   author: maxseidlitz
   developer: maxseidlitz
   category: Productivity
-  icon: https://raw.githubusercontent.com/maxseidlitz/CalTimer/main/public/icon-512.png
+  icon: https://raw.githubusercontent.com/maxseidlitz/CalTimer/main/web/public/icon-512.png
   title:
     en_us: CalTimer
   tagline:

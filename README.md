@@ -78,7 +78,12 @@ Widgets und Kalender bleiben erhalten.
 
 ## Lokal entwickeln
 
+Backend: Node + Express (`src/`). Frontend: React + Vite + Tailwind + [shadcn/ui](https://ui.shadcn.com) (`web/`).
+
 ```bash
-npm install
-DEMO=1 npm run dev     # Beispieltermine, beliebiger …icloud.com-Link wird akzeptiert
+npm install && (cd web && npm install)
+DEMO=1 npm run dev           # API auf :3000, Beispieltermine statt iCloud
+cd web && npm run dev        # Frontend auf :5173, /api wird an :3000 weitergereicht
 ```
+
+Produktion: `cd web && npm run build` erzeugt `web/dist`, das der Express-Server ausliefert (im Dockerfile automatisch).
