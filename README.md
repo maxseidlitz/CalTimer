@@ -24,12 +24,25 @@ Grenzen, die du kennen solltest:
 - Wer einen Kalender-Link kennt, kann diesen Kalender lesen. Link verloren oder unsicher? Auf dem iPhone „Öffentlicher Kalender“ aus- und wieder einschalten – dann ist der alte Link ungültig.
 - Wer Root-Zugriff auf das ZimaBoard hat, kommt an die Daten in `/data`.
 
-## Auf dem ZimaBoard starten
+## Als App in ZimaOS installieren (empfohlen)
+
+Das Image wird bei jedem Push auf `main` automatisch gebaut und unter `ghcr.io/maxseidlitz/caltimer:latest` veröffentlicht.
+
+1. Per SSH den Datenordner anlegen: `sudo mkdir -p /DATA/AppData/caltimer-data && sudo chown 1000:1000 /DATA/AppData/caltimer-data`
+2. ZimaOS → App Store → **Benutzerdefinierte Installation** → **Import** → **Compose** → Inhalt von [`zimaos-compose.yml`](zimaos-compose.yml) einfügen → installieren
+3. Einrichtungscode anzeigen: `sudo docker logs caltimer`
+
+Updates: in ZimaOS bei CalTimer auf **Aktualisieren** bzw. App neu installieren – die Daten in `/DATA/AppData/caltimer-data` bleiben erhalten.
+
+## Auf dem ZimaBoard per Kommandozeile starten (Alternative)
+
+Auf ZimaOS braucht `docker compose` mit `sudo` einen beschreibbaren Konfig-Ordner, daher `env DOCKER_CONFIG=/DATA/.docker`.
 
 ```bash
 mkdir -p /DATA/AppData && cd /DATA/AppData
 curl -L https://github.com/maxseidlitz/CalTimer/archive/refs/heads/main.tar.gz | tar xz && mv CalTimer-main caltimer && cd caltimer
-sudo docker compose up -d --build
+sudo mkdir -p /DATA/.docker
+sudo env DOCKER_CONFIG=/DATA/.docker docker compose up -d --build
 sudo docker logs caltimer        # zeigt den Einrichtungscode
 ```
 

@@ -1,10 +1,9 @@
 # Für ZimaOS: App Store → Benutzerdefinierte Installation → Import → diesen Inhalt einfügen.
-# Voraussetzung: Das Image "caltimer:latest" wurde vorher auf dem ZimaBoard gebaut (siehe README).
+# Das Image baut GitHub Actions bei jedem Push auf main (siehe .github/workflows/docker.yml).
 name: caltimer
 services:
   caltimer:
-    image: caltimer:latest
-    pull_policy: never
+    image: ghcr.io/maxseidlitz/caltimer:latest
     container_name: caltimer
     restart: unless-stopped
     ports:
