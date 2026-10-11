@@ -92,7 +92,10 @@ async function createSession(req, res) {
   await store.sessions.save(sessions);
   res.cookie(COOKIE, token, {
     httpOnly: true,
-    sameSite: 'strict',
+    // Lax statt Strict: iOS wertet den Start der Home-Bildschirm-App (bzw. „Fortsetzen“
+    // nach der HTTP-Warnung) teils als fremde Navigation und schickt Strict-Cookies dann
+    // nicht mit. CSRF bleibt abgewehrt: Änderungen nur per POST/DELETE + Origin-Prüfung.
+    sameSite: 'lax',
     secure: req.secure,
     path: '/',
     maxAge: SESSION_MS,

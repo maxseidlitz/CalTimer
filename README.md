@@ -12,7 +12,7 @@ Countdown-Widgets für Termine aus deinem iCloud-Kalender. Läuft als Docker-Con
 
 CalTimer bekommt **keinen Zugang zu deinem iCloud-Account**. Du gibst einzelne Kalender als „Öffentlicher Kalender“ frei; CalTimer liest nur diese per geheimem Link – kein Zugriff auf Mail, Kontakte, Fotos oder andere Kalender.
 
-- **Login:** Passphrase (scrypt-gehasht), Sitzungs-Cookie `HttpOnly` + `SameSite=Strict`, 90 Tage gültig. Nach 5 Fehlversuchen steigende Sperrzeiten.
+- **Login:** Passphrase (scrypt-gehasht), Sitzungs-Cookie `HttpOnly` + `SameSite=Lax`, 90 Tage gültig. Nach 5 Fehlversuchen steigende Sperrzeiten.
 - **Ersteinrichtung:** nur mit einmaligem Code aus dem Container-Log – niemand anderes im WLAN kann die Passphrase festlegen.
 - **Kalender-Links:** werden nur per HTTPS von `*.icloud.com` abgerufen (keine Anfragen an andere Server oder dein Heimnetz), verlassen den Server nie wieder und liegen nur für den Container-User lesbar in `/data`.
 - **Browser-Schutz:** Host-Header-Prüfung (gegen DNS-Rebinding), Origin-Prüfung, Content-Security-Policy, kein Einbetten in fremde Seiten.
