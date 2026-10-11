@@ -1,0 +1,60 @@
+# Für ZimaOS: App Store → Benutzerdefinierte Installation → Import → diesen Inhalt einfügen.
+# Voraussetzung: Das Image "caltimer:latest" wurde vorher auf dem ZimaBoard gebaut (siehe README).
+name: caltimer
+services:
+  caltimer:
+    image: caltimer:latest
+    pull_policy: never
+    container_name: caltimer
+    restart: unless-stopped
+    ports:
+      - target: 3000
+        published: "3000"
+        protocol: tcp
+    environment:
+      - TZ=Europe/Berlin
+    volumes:
+      - type: bind
+        source: /DATA/AppData/caltimer-data
+        target: /data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    x-casaos:
+      ports:
+        - container: "3000"
+          description:
+            en_us: Web UI
+      volumes:
+        - container: /data
+          description:
+            en_us: Passphrase hash, calendar links and widgets
+
+x-casaos:
+  architectures:
+    - amd64
+  main: caltimer
+  author: maxseidlitz
+  developer: maxseidlitz
+  category: Productivity
+  icon: https://raw.githubusercontent.com/maxseidlitz/CalTimer/main/public/icon-512.png
+  title:
+    en_us: CalTimer
+  tagline:
+    en_us: Countdown widgets for your calendar
+    de_de: Countdown-Widgets für deinen Kalender
+  description:
+    en_us: Countdown widgets for events from your iCloud calendar.
+    de_de: Countdown-Widgets für Termine aus deinem iCloud-Kalender.
+  scheme: http
+  port_map: "3000"
+  index: /
